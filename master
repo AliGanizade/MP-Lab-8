@@ -1,0 +1,78 @@
+#define F_CPU 16000000UL 
+#define SLAVE_ADDR 0x08 
+
+/* 
+0x00 - do nothing
+0x01 - send
+0x02 - receive */
+
+#include <avr/io.h>
+#include <util/delay.h>
+#include <stdbool.h>
+
+void TWI_start() {
+    TWCR = (1 << TWINT) | (1 << TWSTA) | (1 << TWEN); 
+    while (!(TWCR & (1 << TWINT))); 
+}
+
+void TWI_stop() {
+    TWCR = (1 << TWINT) | (1 << TWSTO) | (1 << TWEN); 
+}
+
+void TWI_write(uint8_t data) {
+    TWDR = data; 
+    TWCR = (1 << TWINT) | (1 << TWEN);
+    while (!(TWCR & (1 << TWINT)));
+}
+
+uint8_t TWI_read_nack() {
+    TWCR = (1 << TWINT) | (1 << TWEN);
+    while (!(TWCR & (1 << TWINT))); 
+    return TWDR; 
+}
+
+void send_to_slave(uint8_t data) {
+    TWI_start();
+    TWI_write((SLAVE_ADDR << 1) | 0); 
+    TWI_write(data); 
+    TWI_stop();
+}
+
+uint8_t request_from_slave() {
+    uint8_t data;
+    TWI_start();
+    TWI_write((SLAVE_ADDR << 1) | 1); 
+    data = TWI_read_nack(); 
+    TWI_stop();
+    return data;
+}
+
+void setup() {
+    TWSR = 0x00; // prescaler 1
+    TWBR = 72; // 100kHz
+    TWCR = (1 << TWEN); 
+
+    PORTC |= (1 << PC4) | (1 << PC5); 
+
+    DDRB |= (1 << PB5); 
+    DDRD &= ~(1 << PD2); 
+    PORTD |= (1 << PD2);
+}
+
+void loop() {
+    if (!(PIND & (1 << PD2))) {
+        send_to_slave(0x01);
+    } else {
+        send_to_slave(0x00);
+    }
+
+    uint8_t received = request_from_slave(); 
+
+    if (received == 0x02) { 
+        PORTB |= (1 << PB5);
+    } else {
+        PORTB &= ~(1 << PB5);
+    }
+
+    _delay_ms(10);
+}
